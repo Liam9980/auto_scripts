@@ -15,7 +15,7 @@ jobs:
     timeout-minutes: 60
     concurrency:
       group: Hus_Renew
-      cancel-in-progress: false
+      cancel-in-progress: true
     env:
       # ════════════════════════════════════════════════════════════════
       # Secrets（在公开 repo → Settings → Secrets 中配置）
