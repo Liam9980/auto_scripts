@@ -1,8 +1,8 @@
-name: 🔄 Hus Auto Renew
+name: 🔄 Hus Auto Renew ①
 
 on:
   schedule:
-    - cron: '07 0 */2 * *'  #每2天UTC 00:07 
+    - cron: '07 0 */2 * *'  #每2天UTC 00:07（第①份，错开避免并发）
   workflow_dispatch:
 
 permissions:
@@ -12,11 +12,11 @@ permissions:
 jobs:
   renew:
     runs-on: ubuntu-latest
-    # 60 分钟不够：单台服务器最坏路径 = 20 次 captcha 重试 × 20 轮 IP 轮换 × 10s 命令超时，
-    # 被硬砍会在账号处理到一半时中断（留下"续了一半"的状态）。
-    timeout-minutes: 120
+    # 本 workflow 只跑一个账号：顺利 4~5 分钟，卡在换 IP 也就 20~30 分钟，
+    # 45 分钟足够；超时即说明真的卡死，早点暴露比拖满 120 分钟好。
+    timeout-minutes: 45
     concurrency:
-      group: Hus_Renew
+      group: Hus_Renew_1
       # 手动触发不应该取消正在跑的定时任务——那会把正在续期的账号打断在半路。
       # 设成 false 后，新任务排队等待，而不是抢占。
       cancel-in-progress: false
@@ -24,10 +24,10 @@ jobs:
       # ════════════════════════════════════════════════════════════════
       # Secrets（在公开 repo → Settings → Secrets 中配置）
       # ════════════════════════════════════════════════════════════════
-      # hus.co.id 账号，多个用分号分隔：
+      # 本 workflow 只跑一个账号，读 HUS_BATCH_N（N = 文件名编号）：
       #   phone,tg_bot_token,tg_chat_id,tg_api_id,tg_api_hash,tg_session
-      #   TG 凭据（后三个字段）由每账号独立提供
-      HUS_BATCH: ${{ secrets.HUS_BATCH }}
+      # 多账号 = 多个 workflow 文件，各自一个 secret，互不影响。
+      HUS_BATCH: ${{ secrets.HUS_BATCH_1 }}
       # 代理
       PROXY_CONTENT: ${{ secrets.HUS_HY2_PROXY_URL }}
       SOCKS_PORT: ${{ secrets.SOCKS_PORT || '10808' }}
@@ -50,6 +50,8 @@ jobs:
       # 私有仓库（含 hus-renew.py）
       PRIVATE_REPO: jyucoeng/auto_hus_private
       PROJECT_DIR: hus
+      # 每份 workflow 各写各的时间文件，多账号并发也不会互相覆盖
+      TIME_DIR: hus/1
 
     steps:
       - name: 检出公开仓库
@@ -72,7 +74,7 @@ jobs:
 
       - name: 校验 HUS_BATCH
         env:
-          HUS_BATCH: ${{ secrets.HUS_BATCH }}
+          HUS_BATCH: ${{ secrets.HUS_BATCH_1 }}
         run: |
           python3 - <<'PY'
           import json, os, sys
@@ -232,10 +234,10 @@ jobs:
             echo "提交执行时间，第 ${attempt}/3 次尝试"
             git fetch origin refs/heads/main:refs/remotes/origin/main
             git reset --hard origin/main
-            mkdir -p "${{ env.PROJECT_DIR }}"
-            date +'%Y-%m-%d %H:%M:%S' > "${{ env.PROJECT_DIR }}/time.txt"
-            git add "${{ env.PROJECT_DIR }}/time.txt"
-            git commit -m "更新时间文件: $(date +'%Y-%m-%d %H:%M:%S')"
+            mkdir -p "${{ env.TIME_DIR }}"
+            date +'%Y-%m-%d %H:%M:%S' > "${{ env.TIME_DIR }}/time.txt"
+            git add "${{ env.TIME_DIR }}/time.txt"
+            git commit -m "更新时间文件(①): $(date +'%Y-%m-%d %H:%M:%S')"
             if git push origin HEAD:refs/heads/main; then
               echo "执行时间已提交"
               exit 0
@@ -257,7 +259,6 @@ jobs:
           cutoff_epoch=$(date -d '24 hours ago' +%s)
           runs=$(gh run list \
             --repo "$GITHUB_REPOSITORY" \
-            --workflow="hus-renew.yml" \
             --limit=100 \
             --json databaseId,createdAt,status,conclusion \
             --jq '.[] | [.databaseId, .createdAt, .status, (.conclusion // "")] | @tsv' 2>/dev/null)
