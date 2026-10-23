@@ -75,20 +75,49 @@ jobs:
           HUS_BATCH: ${{ secrets.HUS_BATCH }}
         run: |
           python3 - <<'PY'
-          import os, sys
+          import json, os, sys
           value = os.environ.get("HUS_BATCH", "").strip()
           if not value:
               raise SystemExit("HUS_BATCH 未设置或为空")
-          accounts = [x.strip() for x in value.replace("\\n", ";").split(";") if x.strip()]
-          if not accounts:
-              raise SystemExit("HUS_BATCH 没有有效账号")
-          for index, account in enumerate(accounts, 1):
-              fields = [x.strip() for x in account.split(",")]
-              if len(fields) < 6:
-                  raise SystemExit(f"HUS_BATCH 第 {index} 个账号字段不足：需要 phone,bot_token,chat_id,api_id,api_hash,session")
-              if any(not fields[i] for i in range(6)):
-                  raise SystemExit(f"HUS_BATCH 第 {index} 个账号存在空字段")
-          print(f"HUS_BATCH 预检通过：{len(accounts)} 个账号，凭据内容已隐藏")
+
+          phones = []
+          if value.startswith("["):
+              # JSON 数组格式：多账号推荐写法，字段名见 README
+              try:
+                  data = json.loads(value)
+              except json.JSONDecodeError as exc:
+                  raise SystemExit(f"HUS_BATCH 以 [ 开头但 JSON 解析失败：{exc}")
+              if not isinstance(data, list) or not data:
+                  raise SystemExit("HUS_BATCH 的 JSON 必须是非空数组")
+              for index, item in enumerate(data, 1):
+                  if not isinstance(item, dict):
+                      raise SystemExit(f"HUS_BATCH 第 {index} 项不是对象")
+                  phone = str(item.get("phone") or "").strip()
+                  if not phone:
+                      raise SystemExit(f"HUS_BATCH 第 {index} 项缺少 phone")
+                  missing = [k for k in ("tg_bot_token", "tg_chat_id", "tg_api_id", "tg_api_hash", "tg_session")
+                             if not str(item.get(k) or "").strip()]
+                  if missing:
+                      raise SystemExit(f"HUS_BATCH 第 {index} 个账号缺少字段：{','.join(missing)}")
+                  phones.append(phone)
+              fmt = "JSON"
+          else:
+              accounts = [x.strip() for x in value.replace("\\n", ";").split(";") if x.strip()]
+              if not accounts:
+                  raise SystemExit("HUS_BATCH 没有有效账号")
+              for index, account in enumerate(accounts, 1):
+                  fields = [x.strip() for x in account.split(",")]
+                  if len(fields) < 6:
+                      raise SystemExit(f"HUS_BATCH 第 {index} 个账号字段不足：需要 phone,bot_token,chat_id,api_id,api_hash,session")
+                  if any(not fields[i] for i in range(6)):
+                      raise SystemExit(f"HUS_BATCH 第 {index} 个账号存在空字段")
+                  phones.append(fields[0])
+              fmt = "分号"
+
+          dupes = sorted({p for p in phones if phones.count(p) > 1})
+          if dupes:
+              raise SystemExit(f"HUS_BATCH 存在重复账号（会导致同一账号被续两次）：{', '.join(dupes)}")
+          print(f"HUS_BATCH 预检通过：{len(phones)} 个账号（{fmt}格式），凭据内容已隐藏")
           PY
 
       - name: 设置 Python
