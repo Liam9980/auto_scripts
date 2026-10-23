@@ -1,6 +1,6 @@
 # =============================================================================
 # 多账号说明：一个账号 = 一个 workflow 文件
-# 本文件 = 第 ① 个账号 | cron 00:07 UTC | group Hus_Renew_1 | secret HUS_BATCH_1 | 时间文件 hus/1/time.txt
+# 本文件 = 第 ① 个账号 | cron 00:07 UTC | group Hus_Renew_1 | secret HUS_BATCH | 时间文件 hus/1/time.txt
 # -----------------------------------------------------------------------------
 # 新增账号的做法：复制本文件 → 改文件名 → 改下面 6 处（漏任何一处都会出问题）
 #
@@ -58,7 +58,7 @@ jobs:
       # 本 workflow 只跑一个账号，读 HUS_BATCH_N（N = 文件名编号）：
       #   phone,tg_bot_token,tg_chat_id,tg_api_id,tg_api_hash,tg_session
       # 多账号 = 多个 workflow 文件，各自一个 secret，互不影响。
-      HUS_BATCH: ${{ secrets.HUS_BATCH_1 }}
+      HUS_BATCH: ${{ secrets.HUS_BATCH }}
       # 代理
       PROXY_CONTENT: ${{ secrets.HUS_HY2_PROXY_URL }}
       SOCKS_PORT: ${{ secrets.SOCKS_PORT || '10808' }}
@@ -105,7 +105,7 @@ jobs:
 
       - name: 校验 HUS_BATCH
         env:
-          HUS_BATCH: ${{ secrets.HUS_BATCH_1 }}
+          HUS_BATCH: ${{ secrets.HUS_BATCH }}
         run: |
           python3 - <<'PY'
           import json, os, sys
