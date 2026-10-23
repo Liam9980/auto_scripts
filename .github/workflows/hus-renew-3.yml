@@ -1,3 +1,34 @@
+# =============================================================================
+# 多账号说明：一个账号 = 一个 workflow 文件
+# 本文件 = 第 ③ 个账号 | cron 00:27 UTC | group Hus_Renew_3 | secret HUS_BATCH_3 | 时间文件 hus/3/time.txt
+# -----------------------------------------------------------------------------
+# 新增账号的做法：复制本文件 → 改文件名 → 改下面 6 处（漏任何一处都会出问题）
+#
+#   1. name:              改成不同的名字，如 "🔄 Hus Auto Renew ④"
+#                          → 不改：Actions 列表里全是同名 workflow，出问题分不清谁是谁
+#
+#   2. cron               和其他份错开 10 分钟，如 '37 0 */2 * *'
+#                          → 不改：同一秒启动，几份同时 git push 会互相冲突，同时向 WARP 注册也容易被限流
+#
+#   3. concurrency.group  改成唯一的，如 Hus_Renew_4        ★ 最容易漏的一条 ★
+#                          → 不改：concurrency group 是【仓库级、跨 workflow 共享】的，
+#                            和别的份同名 → 所有 workflow 串行排队，并行收益直接归零
+#
+#   4. HUS_BATCH_N        本文件有两处（job 的 env 和「校验 HUS_BATCH」步骤的 env），都要改
+#                          → 不改：读到别人的 secret，同一个账号会被续两遍（还可能并发撞车）
+#
+#   5. TIME_DIR           改成 hus/4，和其他份分开
+#                          → 不改：多份同时写同一个 time.txt，并发提交互相覆盖
+#
+#   6. 仓库 Settings → Secrets 新建一个 HUS_BATCH_4，内容为单个账号的 6 个字段：
+#                          phone,tg_bot_token,tg_chat_id,tg_api_id,tg_api_hash,tg_session
+#
+# 不需要改的：
+#   - artifact 名（hus-screenshots-${{ github.run_id }}）→ run_id 每次运行唯一，天然不冲突
+#   - PROJECT_DIR / PRIVATE_REPO / 代理与 token 相关 secret → 各份共用同一套
+#   - 步骤内容 → 私有库里的 hus-renew.py 是同一份，改脚本只需要改一处
+# =============================================================================
+
 name: 🔄 Hus Auto Renew ③
 
 on:
