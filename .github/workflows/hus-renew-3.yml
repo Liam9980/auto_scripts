@@ -12,9 +12,9 @@ permissions:
 jobs:
   renew:
     runs-on: ubuntu-latest
-    # 本 workflow 只跑一个账号：顺利 4~5 分钟，卡在换 IP 也就 20~30 分钟，
-    # 45 分钟足够；超时即说明真的卡死，早点暴露比拖满 120 分钟好。
-    timeout-minutes: 45
+    # 60 分钟不够：单台服务器最坏路径 = 20 次 captcha 重试 × 20 轮 IP 轮换 × 10s 命令超时，
+    # 被硬砍会在账号处理到一半时中断（留下"续了一半"的状态）。
+    timeout-minutes: 120
     concurrency:
       group: Hus_Renew_3
       # 手动触发不应该取消正在跑的定时任务——那会把正在续期的账号打断在半路。
