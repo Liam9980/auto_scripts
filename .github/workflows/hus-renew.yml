@@ -186,6 +186,11 @@ jobs:
           FFMPEG_BIN=$(python3 -c 'import imageio_ffmpeg;print(imageio_ffmpeg.get_ffmpeg_exe())')
           sudo ln -sf "$FFMPEG_BIN" /usr/local/bin/ffmpeg
           echo "[INFO] ffmpeg: $(ffmpeg -version | head -1)"
+          for b in chromium chromium-browser google-chrome google-chrome-stable; do
+            if command -v "$b" >/dev/null 2>&1; then
+              echo "[INFO] 浏览器 $b: $("$b" --version 2>&1 | head -1) → $(command -v "$b")"
+            fi
+          done
           python3 -c 'import speech_recognition, pydub, audioop; print("语音依赖导入成功")'
 
       - name: 启用 WARP
@@ -229,8 +234,11 @@ jobs:
             echo "[HEARTBEAT] 执行续期仍在运行: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
             sleep 15
           done
-          wait "$renew_pid"
-          status=$?
+          # 注意：job 默认 `bash -e`，`wait` 返回非 0 会让 shell 当场退出，
+          # 后面的退出码回显和日志尾部全都打不出来（失败时反而没有诊断信息）。
+          # 这里显式兜住退出码。
+          status=0
+          wait "$renew_pid" || status=$?
           echo "---- hus-renew.py 退出码: ${status} ----"
           echo "---- 日志尾部（最后 80 行）----"
           tail -n 80 hus-renew.log || true
