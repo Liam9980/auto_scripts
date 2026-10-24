@@ -302,28 +302,31 @@ jobs:
           runs=$(gh run list \
             --repo "$GITHUB_REPOSITORY" \
             --limit=100 \
-            --json databaseId,createdAt,status,conclusion \
-            --jq '.[] | [.databaseId, .createdAt, .status, (.conclusion // "")] | @tsv' 2>/dev/null)
+            --json databaseId,createdAt,status \
+            --jq '.[] | [.databaseId, .createdAt, .status] | @tsv' 2>/dev/null)
           if [ -z "$runs" ]; then
             echo "没有找到可清理的运行记录"
             exit 0
           fi
-          while IFS=$'\t' read -r run_id created_at status conclusion; do
+
+          # 先筛出该删的，再并发删除。
+          # 以前逐条 gh run delete（每次约 1 秒），几十条历史就是 70 多秒；
+          # 改成 xargs -P 10 之后只要几秒。
+          to_delete=$(while IFS=$'\t' read -r run_id created_at status; do
             [ -z "$run_id" ] && continue
-            if [ "$run_id" = "$current_run" ]; then
-              echo "保留当前运行记录: $run_id"
-              continue
-            fi
+            [ "$run_id" = "$current_run" ] && continue
+            [ "$status" != "completed" ] && continue
             created_epoch=$(date -d "$created_at" +%s 2>/dev/null || echo 0)
-            if [ "$created_epoch" -ge "$cutoff_epoch" ]; then
-              echo "保留 24 小时内记录: $run_id ($created_at)"
-              continue
-            fi
-            if [ "$status" != "completed" ]; then
-              echo "保留未完成记录: $run_id (status=$status)"
-              continue
-            fi
-            echo "删除超过 24 小时的已完成记录: $run_id (created=$created_at, conclusion=$conclusion)"
-            gh run delete "$run_id" --repo "$GITHUB_REPOSITORY" || true
-          done <<< "$runs"
+            [ "$created_epoch" -ge "$cutoff_epoch" ] && continue
+            echo "$run_id"
+          done <<< "$runs")
+
+          if [ -z "$to_delete" ]; then
+            echo "清理完成：没有超过 24 小时的已完成记录"
+            exit 0
+          fi
+
+          count=$(echo "$to_delete" | wc -l | tr -d ' ')
+          echo "待删除 $count 条超过 24 小时的已完成记录（并发 10 路）"
+          echo "$to_delete" | xargs -P 10 -I{} sh -c 'gh run delete "$1" --repo "$2" >/dev/null 2>&1 || true' _ {} "$GITHUB_REPOSITORY"
           echo "清理完成：保留最近 24 小时记录及所有未完成记录"
