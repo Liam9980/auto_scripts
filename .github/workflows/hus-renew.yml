@@ -160,21 +160,32 @@ jobs:
           cache: pip
           cache-dependency-path: ${{ github.repository_owner }}-${{ github.event.repository.name }}-${{ env.PROJECT_DIR }}/requirements.txt
 
-      - name: 缓存 Chromium apt 包
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/hus-apt/*.deb
-          key: apt-chromium-${{ runner.os }}-${{ runner.arch }}-v1
-
       - name: 安装依赖
         working-directory: ${{ github.repository_owner }}-${{ github.event.repository.name }}-${{ env.PROJECT_DIR }}
         run: |
-          mkdir -p "$HOME/.cache/hus-apt/partial"
-          sudo apt-get update
-          sudo apt-get -o Dir::Cache::archives="$HOME/.cache/hus-apt" \
-            install -y xvfb chromium ffmpeg unzip curl wget jq ca-certificates
-          pip install --upgrade pip
+          # runner 镜像（Ubuntu 26.04）已自带 Chromium 155 / Xvfb / curl / wget / jq / unzip。
+          # 以前无脑 apt install 这 8 个包，实际只缺 ffmpeg，却拖进 100+ 个依赖、
+          # 48MB、60 个文件，从 azure.archive.ubuntu.com 下只有 ~59KB/s，光装依赖就 834 秒。
+          # 现在：缺什么补什么；ffmpeg 改用 PyPI 的静态二进制（走 PyPI，实测 11 秒装完全部 pip 包）。
+          missing=""
+          command -v chromium >/dev/null 2>&1 || command -v chromium-browser >/dev/null 2>&1 \
+            || missing="$missing chromium"
+          for bin in Xvfb curl wget jq unzip; do
+            command -v "$bin" >/dev/null 2>&1 || missing="$missing $bin"
+          done
+          if [ -n "$missing" ]; then
+            echo "[INFO] 镜像缺少:$missing，补装"
+            sudo apt-get update
+            sudo apt-get install -y $missing
+          else
+            echo "[INFO] 浏览器和基础工具镜像已自带，跳过 apt"
+          fi
+
+          pip install --upgrade pip -q
           pip install -r requirements.txt -q
+          FFMPEG_BIN=$(python3 -c 'import imageio_ffmpeg;print(imageio_ffmpeg.get_ffmpeg_exe())')
+          sudo ln -sf "$FFMPEG_BIN" /usr/local/bin/ffmpeg
+          echo "[INFO] ffmpeg: $(ffmpeg -version | head -1)"
           python3 -c 'import speech_recognition, pydub, audioop; print("语音依赖导入成功")'
 
       - name: 启用 WARP
