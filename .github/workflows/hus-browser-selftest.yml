@@ -75,6 +75,9 @@ jobs:
           fi
           pip install --upgrade pip -q
           pip install -r requirements.txt -q
+          # 预生成字体缓存：Chromium 第一次启动会在容器里现算字体缓存，实测要 20 秒以上，
+          # 正好撞上 DrissionPage 默认的 30 秒连接超时（偶发 BrowserConnectError 的根源）。
+          fc-cache -f >/dev/null 2>&1 || true
           FFMPEG_BIN=$(python3 -c 'import imageio_ffmpeg;print(imageio_ffmpeg.get_ffmpeg_exe())')
           sudo ln -sf "$FFMPEG_BIN" /usr/local/bin/ffmpeg
           for b in chromium chromium-browser google-chrome; do
